@@ -1,26 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：禁止缩放，适配刘海屏 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>DeepSpace: Nexus</title>
+    <title>DeepSpace: V25.1 Fixed</title>
+    
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+
     <style>
         /* --- 0. 全局设置 --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { 
-            margin: 0; background: #020202; overflow: hidden; 
-            /* 使用 Apple 系统字体，更贴合 Safari */
-            font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; 
+            margin: 0; background: #000000; overflow: hidden; 
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; 
             color: #fff; user-select: none;
         }
         canvas { display: block; }
-        
-        /* 关键：防止 iOS 视频全屏 */
-        #input_video { 
-            display: none; 
-            position: absolute; top: 0; left: 0; 
-        }
+        #input_video { display: none; }
 
         /* --- 1. 入场动画 --- */
         #loader {
@@ -45,149 +41,276 @@
         #ui-layer { position: absolute; top: 30px; left: 30px; z-index: 1000; }
         
         #menu-btn {
-            width: 44px; height: 44px; /* 加大触控区适配手指 */
+            width: 44px; height: 44px;
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
             transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
             box-shadow: 0 8px 20px rgba(0,0,0,0.3);
         }
         #menu-btn::after {
             content: ''; width: 6px; height: 6px; background: #fff; border-radius: 50%;
             box-shadow: 0 0 10px rgba(255,255,255,0.8);
-            transition: background 0.3s;
         }
         #menu-btn:active { transform: scale(0.9); }
 
-        /* --- 3. 菜单面板 (高斯模糊+大圆角) --- */
+        /* --- 3. 菜单面板 --- */
         #menu-panel {
-            position: absolute; top: -10px; left: -10px;
-            width: 280px;
-            /* 深度磨砂质感 */
-            background: rgba(15, 15, 20, 0.75); 
-            backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px); /* 模糊度拉满 */
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            /* 大圆角 */
-            border-radius: 24px; 
-            padding: 28px;
-            
+            position: absolute; top: -10px; left: -10px; width: 280px; 
+            height: 520px; /* 稍微加高以容纳完整的说明 */
+            background: rgba(10, 10, 15, 0.45); 
+            backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; 
             transform-origin: 32px 32px; 
-            transform: scale(0.4); opacity: 0; 
-            pointer-events: none;
-            
-            /* iOS 风格的弹簧动画 */
-            transition: 
-                transform 0.6s cubic-bezier(0.19, 1, 0.22, 1),
-                opacity 0.4s ease;
-            
+            transform: scale(0.4); opacity: 0; pointer-events: none;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.4s ease;
             box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+            overflow: hidden; 
         }
-
         #ui-layer.active #menu-panel { transform: scale(1); opacity: 1; pointer-events: auto; }
         #ui-layer.active #menu-btn { opacity: 0; pointer-events: none; transform: scale(0.8); }
 
-        /* --- 4. 菜单排版 --- */
+        /* 视图容器 */
+        .view-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 28px;
+            display: flex; flex-direction: column;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            background: transparent; 
+        }
+
+        /* 状态控制 */
+        .view-hidden { 
+            transform: translateX(100%); opacity: 0; pointer-events: none; z-index: 0;
+        }
+        .view-active { 
+            transform: translateX(0); opacity: 1; pointer-events: auto; z-index: 10;
+        }
+        .view-slide-left {
+            transform: translateX(-30%); opacity: 0; pointer-events: none;
+        }
+
         .header { 
             display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 25px; padding-bottom: 12px;
+            margin-bottom: 20px; padding-bottom: 12px; flex-shrink: 0;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        
-        /* 彩色英文标题 */
         .title { 
             font-size: 14px; font-weight: 800; letter-spacing: 2px; 
-            /* 渐变流光文字 */
             background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
             -webkit-background-clip: text; color: transparent;
-            text-transform: uppercase;
-            animation: hue-flow 8s infinite linear;
         }
-        
         .close { font-size: 11px; color: rgba(255,255,255,0.4); cursor: pointer; padding: 4px; }
-        .close:hover { color: #fff; }
-
-        .row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; align-items: center; }
-        .label { color: rgba(255,255,255,0.5); font-weight: 500; }
-        .value { color: #ddd; font-family: "SF Mono", "Menlo", monospace; letter-spacing: -0.5px; } 
         
+        .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; align-items: center; }
+        .label { color: rgba(255,255,255,0.6); font-weight: 500; }
+        .value { color: #eee; font-family: "SF Mono", "Menlo", monospace; letter-spacing: -0.5px; } 
         .value.accent { color: #00ffaa; font-weight: 600; text-shadow: 0 0 12px rgba(0,255,170,0.4); } 
         .value.inactive { color: #557799; }
-
+        
         .section-title { 
-            font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 24px; margin-bottom: 10px; 
+            font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 15px; margin-bottom: 8px; 
             letter-spacing: 1px; text-transform: uppercase; font-weight: 700;
         }
+        .guide-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: rgba(255,255,255,0.6); }
+
+        .jump-btn {
+            width: 100%; height: 38px; margin-bottom: 8px; flex-shrink: 0;
+            background: rgba(0, 150, 255, 0.15); border: 1px solid rgba(0, 150, 255, 0.3);
+            border-radius: 12px; color: #00ddff; font-size: 11px; letter-spacing: 1px; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .jump-btn.secondary {
+            background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #ccc;
+        }
+        .jump-btn:hover { background: rgba(0, 150, 255, 0.3); box-shadow: 0 0 15px rgba(0,150,255,0.4); }
+
+        .sub-list { display: flex; flex-direction: column; gap: 8px; }
+        .sub-item {
+            background: rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 10px;
+            font-size: 12px; color: #ccc; cursor: pointer; border: 1px solid transparent;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s;
+        }
+        .sub-item:hover { background: rgba(255,255,255,0.1); color: #fff; transform: translateX(5px); }
+        .sub-item.active { background: rgba(0,200,255,0.2); border-color: rgba(0,200,255,0.4); color: #00e5ff; }
         
-        .guide-row { 
-            display: flex; justify-content: space-between; margin-bottom: 8px; 
-            font-size: 11px; color: rgba(255,255,255,0.6); 
+        .setting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .setting-btn {
+            background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; text-align: center;
+            font-size: 11px; cursor: pointer; border: 1px solid transparent; color: #aaa;
+        }
+        .setting-btn.active { background: rgba(0,255,170,0.2); border-color: rgba(0,255,170,0.4); color: #00ffaa; }
+
+        .sub-header {
+            display: flex; align-items: center; margin-bottom: 20px; cursor: pointer; color: #aaa; flex-shrink: 0; padding: 5px 0;
+        }
+        .sub-header:hover { color: #fff; }
+        .back-icon { margin-right: 8px; font-weight: bold; }
+
+        #debug-canvas {
+            position: fixed; bottom: 20px; right: 20px; 
+            width: 160px; height: 120px;
+            background: rgba(0,0,0,0.6); 
+            border: 1px solid #00ffaa; border-radius: 12px;
+            z-index: 2000; display: none; 
+            backdrop-filter: blur(5px); transform: scaleX(-1); pointer-events: none;
         }
 
-        @keyframes hue-flow { 0%{filter: hue-rotate(0deg);} 100%{filter: hue-rotate(360deg);} }
+        .about-info { font-size: 12px; color: #ddd; line-height: 1.6; margin-bottom: 15px; }
+        .log-item { font-size: 11px; color: #888; margin-bottom: 8px; padding-left: 10px; border-left: 2px solid #333; }
+        .log-ver { color: #00e5ff; font-weight: bold; margin-right: 5px; }
+
+        #err-log {
+            position: fixed; bottom: 20px; left: 20px; width: calc(100% - 40px);
+            background: rgba(255,0,0,0.2); color: #ff5555; padding: 10px; font-size: 10px;
+            display: none; border-radius: 8px; pointer-events: none; text-align: center;
+        }
     </style>
 
-    <!-- 基础库 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <!-- 载入层 -->
     <div id="loader">
         <div class="loader-text">NEXUS ENGINE</div>
         <div class="loader-line"><div class="loader-fill" id="load-bar"></div></div>
     </div>
+    
+    <div id="err-log"></div>
+    <canvas id="debug-canvas" width="320" height="240"></canvas>
 
-    <!-- 交互 UI -->
     <div id="ui-layer">
         <div id="menu-btn" onclick="UI.toggle()"></div>
         
         <div id="menu-panel">
-            <div class="header">
-                <!-- 彩色英文标题 -->
-                <span class="title">NEXUS CORE</span>
-                <span class="close" onclick="UI.toggle()">CLOSE</span>
+            <!-- 1. 主界面 (修复版) -->
+            <div id="view-main" class="view-container view-active">
+                <div class="header">
+                    <span class="title">核心控制台</span>
+                    <span class="close" onclick="UI.toggle()">关闭</span>
+                </div>
+
+                <div class="jump-btn" onclick="UI.switchView('galaxy')">
+                    <span>✦ 星际跃迁导航 ✦</span>
+                </div>
+                <div class="jump-btn secondary" onclick="UI.switchView('settings')">
+                    <span>⚙ 系统参数设置</span>
+                </div>
+                <div class="jump-btn secondary" onclick="UI.switchView('about')">
+                    <span>ℹ 关于 & 更新日志</span>
+                </div>
+
+                <div class="row">
+                    <span class="label">当前坐标</span>
+                    <span class="value accent" id="disp-loc">银河系</span>
+                </div>
+                <!-- 已修复：输入模式 ID 加回 -->
+                <div class="row">
+                    <span class="label">输入模式</span>
+                    <span class="value inactive" id="disp-source">触控 / 鼠标</span>
+                </div>
+                <div class="row">
+                    <span class="label">AI 线路</span>
+                    <span class="value" id="disp-net">正在探测...</span>
+                </div>
+                <div class="section-title">引擎状态</div>
+                <div class="row">
+                    <span class="label">刷新率</span>
+                    <span class="value" id="disp-fps">-- Hz</span>
+                </div>
+                <div class="row">
+                    <span class="label">粒子数量</span>
+                    <span class="value" id="disp-count">--</span>
+                </div>
+                <div class="row">
+                    <span class="label">引力张力</span>
+                    <span class="value" id="disp-val">0.00</span>
+                </div>
+
+                <!-- 已修复：操作说明加回 -->
+                <div class="section-title">操作指令</div>
+                <div class="guide-row"><span>单指拖动</span> <span>旋转视角</span></div>
+                <div class="guide-row"><span>握拳</span> <span>引力坍缩 (微距)</span></div>
+                <div class="guide-row"><span>张开手掌</span> <span>宇宙膨胀</span></div>
             </div>
 
-            <div class="row">
-                <span class="label">输入模式</span>
-                <span class="value inactive" id="disp-source">TOUCH / MOUSE</span>
-            </div>
-            <div class="row">
-                <span class="label">AI 节点</span>
-                <span class="value" id="disp-net">AUTO SELECT...</span>
-            </div>
-            <div class="row">
-                <span class="label">线路延迟</span>
-                <span class="value" id="disp-ping">-- ms</span>
-            </div>
-            
-            <div class="section-title">实时遥测</div>
-            <div class="row">
-                <span class="label">刷新率</span>
-                <span class="value" id="disp-fps">-- Hz</span>
-            </div>
-            <div class="row">
-                <span class="label">手势张力</span>
-                <span class="value" id="disp-val">0.00</span>
+            <!-- 2. 星系选择 -->
+            <div id="view-galaxy" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                <div class="section-title">选择目标星系</div>
+                <div class="sub-list">
+                    <div class="sub-item active" onclick="Universe.switch(0, this)">
+                        <span>银河系</span> <span>Galaxy</span>
+                    </div>
+                    <div class="sub-item" onclick="Universe.switch(1, this)">
+                        <span>太阳系</span> <span>Solar</span>
+                    </div>
+                    <div class="sub-item" onclick="Universe.switch(2, this)">
+                        <span>地月系 (含舰队)</span> <span>Earth</span>
+                    </div>
+                    <div class="sub-item" onclick="Universe.switch(3, this)">
+                        <span>卡冈图雅 (黑洞)</span> <span>BlackHole</span>
+                    </div>
+                    <div class="sub-item" onclick="Universe.switch(4, this)">
+                        <span>创生之柱 (星云)</span> <span>Nebula</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="section-title">操作指令</div>
-            <div class="guide-row"><span>单指拖动</span> <span>旋转视界</span></div>
-            <div class="guide-row"><span>握拳</span> <span>引力坍缩</span></div>
-            <div class="guide-row"><span>张开手掌</span> <span>宇宙膨胀</span></div>
+            <!-- 3. 设置界面 -->
+            <div id="view-settings" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                
+                <div class="section-title">手势灵敏度</div>
+                <div class="setting-grid">
+                    <div class="setting-btn" onclick="Config.setSense(4.0, this)">低</div>
+                    <div class="setting-btn active" onclick="Config.setSense(6.0, this)">标准</div>
+                    <div class="setting-btn" onclick="Config.setSense(9.0, this)">高</div>
+                    <div class="setting-btn" onclick="Config.setSense(15.0, this)">极客</div>
+                </div>
+
+                <div class="section-title" style="margin-top:20px;">开发者工具</div>
+                <div class="sub-list">
+                    <div class="sub-item" id="btn-debug" onclick="Config.toggleDebug()">
+                        <span>显示手部骨架 (HUD)</span> <span id="debug-status">OFF</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. 关于界面 -->
+            <div id="view-about" class="view-container view-hidden">
+                <div class="sub-header" onclick="UI.switchView('main')">
+                    <span class="back-icon">‹</span> 返回主控台
+                </div>
+                <div class="section-title">开发者信息</div>
+                <div class="about-info">
+                    开发：<b>Lanstian</b><br>
+                    引擎：DeepSpace Core V25.1<br>
+                    技术：WebGL + MediaPipe + Three.js
+                </div>
+                
+                <div class="section-title">更新日志</div>
+                <div class="log-item"><span class="log-ver">V25.1</span> 紧急修复手势丢失与UI缺失</div>
+                <div class="log-item"><span class="log-ver">V25.0</span> 修复交互卡死，优化菜单逻辑</div>
+                <div class="log-item"><span class="log-ver">V24.0</span> 解锁0.01x无限微距，修复源显示</div>
+                <div class="log-item"><span class="log-ver">V23.0</span> 优化物理阻尼，丝滑变焦</div>
+            </div>
         </div>
     </div>
 
-    <!-- 增加 playsinline 属性防止 iOS 全屏 -->
     <video id="input_video" playsinline muted autoplay></video>
 
-    <!-- Shader 渲染核心 -->
     <script type="x-shader/x-vertex" id="vertexShader">
         attribute float size;
         attribute vec3 customColor;
@@ -195,7 +318,7 @@
         void main() {
             vColor = customColor;
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = size * (400.0 / -mvPosition.z);
+            gl_PointSize = size * (350.0 / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
         }
     </script>
@@ -203,36 +326,93 @@
         uniform sampler2D tex;
         varying vec3 vColor;
         void main() {
-            gl_FragColor = vec4(vColor, 1.0) * texture2D(tex, gl_PointCoord);
-            if (gl_FragColor.a < 0.05) discard;
+            vec4 texColor = texture2D(tex, gl_PointCoord);
+            if (texColor.a < 0.1) discard; 
+            gl_FragColor = vec4(vColor, 1.0) * texColor;
         }
     </script>
 
     <script>
-        // ================= 全局状态 =================
-        const State = {
-            hasHand: false,
-            mRotX: 0, mRotY: 0, mZoom: 1, // 鼠标
-            hRotX: 0, hRotY: 0, hZoom: 1, // 手势
-            tRotX: 0, tRotY: 0, tZoom: 1  // 目标
+        // ================= 全局配置 =================
+        const Config = {
+            sensitivity: 6.0,
+            debugMode: false,
+            
+            setSense: function(val, btn) {
+                this.sensitivity = val;
+                document.querySelectorAll('.setting-btn').forEach(b => b.classList.remove('active'));
+                if(btn) btn.classList.add('active');
+            },
+            
+            toggleDebug: function() {
+                this.debugMode = !this.debugMode;
+                const canvas = document.getElementById('debug-canvas');
+                const btn = document.getElementById('btn-debug');
+                const status = document.getElementById('debug-status');
+                
+                if(this.debugMode) {
+                    canvas.style.display = 'block';
+                    btn.classList.add('active');
+                    status.innerText = "ON";
+                } else {
+                    canvas.style.display = 'none';
+                    btn.classList.remove('active');
+                    status.innerText = "OFF";
+                }
+            }
+        };
+
+        const State = { 
+            hasHand: false, 
+            mRotX: 0, mRotY: 0, mZoom: 1, 
+            hRotX: 0, hRotY: 0, hZoom: 1, 
+            tRotX: 0, tRotY: 0, tZoom: 1  
         };
 
         const UI = {
             el: document.getElementById('ui-layer'),
+            panel: document.getElementById('menu-panel'),
             loader: document.getElementById('loader'),
             bar: document.getElementById('load-bar'),
+            err: document.getElementById('err-log'),
             
             toggle: () => {
                 document.getElementById('ui-layer').classList.toggle('active');
             },
             
+            switchView: (targetId) => {
+                const views = {
+                    main: document.getElementById('view-main'),
+                    galaxy: document.getElementById('view-galaxy'),
+                    settings: document.getElementById('view-settings'),
+                    about: document.getElementById('view-about')
+                };
+
+                Object.values(views).forEach(v => {
+                    v.classList.remove('view-active', 'view-slide-left');
+                    v.classList.add('view-hidden');
+                });
+
+                if(targetId === 'main') {
+                    views.main.classList.remove('view-hidden');
+                    views.main.classList.add('view-active');
+                } else {
+                    views.main.classList.remove('view-hidden');
+                    views.main.classList.add('view-slide-left');
+                    if(views[targetId]) {
+                        views[targetId].classList.remove('view-hidden');
+                        views[targetId].classList.add('view-active');
+                    }
+                }
+            },
+
             intro: () => {
                 let p = 0;
                 const t = setInterval(() => {
                     p += 2; UI.bar.style.width = p + '%';
                     if(p>=100) {
                         clearInterval(t);
-                        setTimeout(() => UI.loader.classList.add('done'), 200);
+                        UI.loader.classList.add('done');
                         Network.init(); 
                     }
                 }, 20);
@@ -241,6 +421,11 @@
             updateMonitor: (fps, handVal) => {
                 document.getElementById('disp-fps').innerText = fps + " Hz";
                 if(handVal !== null) document.getElementById('disp-val').innerText = handVal.toFixed(2);
+            },
+
+            logErr: (msg) => {
+                UI.err.style.display = 'block';
+                UI.err.innerText = "Error: " + msg;
             }
         };
 
@@ -253,7 +438,7 @@
                 State.mRotY += dx; State.mRotX += dy; lx = x; ly = y;
             };
             const zoom = (d) => {
-                State.mZoom += d * 0.001; State.mZoom = Math.max(0.2, Math.min(3.0, State.mZoom));
+                State.mZoom += d * 0.001; State.mZoom = Math.max(0.01, Math.min(6.0, State.mZoom));
             };
             window.addEventListener('mousedown', e => { isDown=true; lx=e.clientX; ly=e.clientY; });
             window.addEventListener('mouseup', () => isDown=false);
@@ -267,84 +452,246 @@
 
         // ================= 2. 渲染引擎 =================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020202, 0.015);
+        scene.fog = new THREE.FogExp2(0x000000, 0.005);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        camera.position.z = 45;
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        camera.position.z = 65; 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
-        function createTex() {
-            const c = document.createElement('canvas'); c.width=64; c.height=64;
+        function createSharpTex() {
+            const c = document.createElement('canvas'); c.width=32; c.height=32;
             const ctx = c.getContext('2d');
-            const g = ctx.createRadialGradient(32,32,0,32,32,32);
-            g.addColorStop(0, 'rgba(255,255,255,1)');       
-            g.addColorStop(0.2, 'rgba(255,240,220,0.6)');   
-            g.addColorStop(0.5, 'rgba(255,255,255,0.05)');  
+            const g = ctx.createRadialGradient(16,16,0,16,16,16);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(0.5, 'rgba(255,255,255,0.8)');
             g.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+            ctx.fillStyle=g; ctx.fillRect(0,0,32,32);
             return new THREE.CanvasTexture(c);
         }
 
-        const P = { count: 85000, r: 55 };
-        let points;
-        
-        function initGalaxy() {
-            const geo = new THREE.BufferGeometry();
-            const pos=[], col=[], sz=[];
-            const cCore = new THREE.Color(0xffaa00);
-            const cMid1 = new THREE.Color(0xff0066);
-            const cMid2 = new THREE.Color(0x9900ff);
-            const cOut  = new THREE.Color(0x00ccff);
+        const sharedMaterial = new THREE.ShaderMaterial({
+            uniforms: { tex: { value: createSharpTex() } },
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent,
+            depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, vertexColors: true
+        });
 
-            for(let i=0; i<P.count; i++) {
-                const isCore = Math.random() < 0.25;
-                let x,y,z, c;
-                if(isCore) {
-                    const r = Math.pow(Math.random(), 3) * 12;
+        const universeGroup = new THREE.Group();
+        scene.add(universeGroup);
+
+        // ================= 3. 宇宙工厂 =================
+        const Universe = {
+            currentType: -1,
+            orbiters: [], 
+
+            switch: function(type, btn) {
+                if(this.currentType === type) return;
+                this.currentType = type;
+                
+                document.querySelectorAll('.sub-item').forEach(b => b.classList.remove('active'));
+                if(btn) btn.classList.add('active');
+                
+                const names = ["银河系", "太阳系", "地月系+舰队", "卡冈图雅", "创生之柱"];
+                document.getElementById('disp-loc').innerText = names[type];
+                
+                setTimeout(() => UI.switchView('main'), 300);
+
+                while(universeGroup.children.length > 0){ 
+                    const obj = universeGroup.children[0];
+                    universeGroup.remove(obj);
+                    if(obj.geometry) obj.geometry.dispose();
+                }
+                this.orbiters = []; 
+                this.create(type);
+            },
+
+            createBall: function(count, radius, colorHex, spread=0) {
+                const geo = new THREE.BufferGeometry();
+                const pos=[], col=[], sz=[];
+                const baseC = new THREE.Color(colorHex);
+                for(let i=0; i<count; i++) {
+                    const r = radius + (Math.random()-0.5) * spread;
                     const theta = Math.random() * Math.PI * 2;
                     const phi = Math.acos(Math.random()*2 - 1);
-                    x = r * Math.sin(phi) * Math.cos(theta);
-                    y = r * Math.sin(phi) * Math.sin(theta);
-                    z = r * Math.cos(phi);
-                    c = cCore.clone().lerp(new THREE.Color(0xffffff), Math.random()*0.3);
-                    sz.push(Math.random()*2.5 + 1.5); 
-                } else {
-                    const r = Math.random()*P.r + 6;
-                    const spin = r * 0.8;
-                    const angle = (i % 4)/4 * Math.PI*2;
-                    const spread = r * 0.35;
-                    const rndX = (Math.random()-0.5)*spread;
-                    const rndY = (Math.random()-0.5)*spread*0.6;
-                    const rndZ = (Math.random()-0.5)*spread;
-                    x = Math.cos(angle+spin)*r + rndX;
-                    y = rndY * 2.0;
-                    z = Math.sin(angle+spin)*r + rndZ;
-                    const ratio = r/P.r;
-                    if(ratio < 0.4) c = cMid1.clone().lerp(cMid2, ratio*2.5);
-                    else c = cMid2.clone().lerp(cOut, (ratio-0.4)*1.6);
-                    sz.push(Math.random()*2);
+                    pos.push(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+                    const c = baseC.clone().multiplyScalar(0.8 + Math.random()*0.4);
+                    col.push(c.r, c.g, c.b);
+                    sz.push(Math.random()*1.5 + 0.5);
                 }
-                pos.push(x,y,z);
-                col.push(c.r, c.g, c.b);
-            }
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-            geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
-            geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
-            
-            const mat = new THREE.ShaderMaterial({
-                uniforms: { tex: { value: createTex() } },
-                vertexShader: document.getElementById('vertexShader').textContent,
-                fragmentShader: document.getElementById('fragmentShader').textContent,
-                depthWrite: false, blending: THREE.AdditiveBlending, transparent: true, vertexColors: true
-            });
-            points = new THREE.Points(geo, mat);
-            scene.add(points);
-        }
-        initGalaxy();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                return new THREE.Points(geo, sharedMaterial);
+            },
 
-        // 渲染循环
+            create: function(type) {
+                let totalCount = 0;
+                const pos=[], col=[], sz=[];
+                const geo = new THREE.BufferGeometry();
+
+                const addParticles = (cnt, fn) => {
+                    for(let i=0; i<cnt; i++) {
+                        const p = fn(i);
+                        pos.push(p.x, p.y, p.z);
+                        col.push(p.c.r, p.c.g, p.c.b);
+                        sz.push(p.s);
+                    }
+                    totalCount += cnt;
+                };
+
+                if (type === 0) { // 银河系
+                    addParticles(60000, (i) => {
+                        const r = Math.random() * 60;
+                        let x,y,z, c;
+                        const baseC = new THREE.Color(0x4444ff);
+                        if (Math.random() < 0.8) {
+                            const angle = Math.random() * Math.PI * 2 * 3; 
+                            const spread = r * 0.4;
+                            x = Math.cos(angle + r * 0.1) * r + (Math.random()-0.5)*spread;
+                            z = Math.sin(angle + r * 0.1) * r + (Math.random()-0.5)*spread;
+                            y = (Math.random() - 0.5) * (r < 10 ? 4 : 1.5);
+                            c = baseC.clone().lerp(new THREE.Color(0xffffff), Math.random());
+                        } else {
+                            const theta=Math.random()*Math.PI*2, phi=Math.acos(Math.random()*2-1);
+                            x=r*Math.sin(phi)*Math.cos(theta); y=r*Math.sin(phi)*Math.sin(theta); z=r*Math.cos(phi);
+                            c = baseC.clone().multiplyScalar(0.5);
+                        }
+                        return {x,y,z, c, s: Math.random()*1.5+0.5};
+                    });
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                    geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                    geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                    universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                else if (type === 1) { // 太阳系
+                    const sun = this.createBall(4000, 5, 0xffaa00, 1);
+                    universeGroup.add(sun);
+                    totalCount += 4000;
+                    const planets = [
+                        { r: 10, c: 0xaaaaaa, s: 1.5, speed: 0.02 }, 
+                        { r: 15, c: 0xffcc00, s: 2.0, speed: 0.015 }, 
+                        { r: 22, c: 0x00aaff, s: 2.2, speed: 0.012 }, 
+                        { r: 28, c: 0xff3300, s: 1.8, speed: 0.01 }, 
+                        { r: 40, c: 0xdcae82, s: 4.0, speed: 0.008 }, 
+                        { r: 52, c: 0xddcc99, s: 3.5, speed: 0.006 }, 
+                        { r: 64, c: 0x88ffff, s: 3.0, speed: 0.005 }, 
+                        { r: 76, c: 0x4466ff, s: 3.0, speed: 0.004 }, 
+                        { r: 88, c: 0x999999, s: 1.0, speed: 0.003 } 
+                    ];
+                    planets.forEach(p => {
+                        const grp = new THREE.Group(); grp.userData = { speed: p.speed };
+                        const pl = this.createBall(1500, p.s, p.c, 0.5); pl.position.set(p.r, 0, 0); grp.add(pl);
+                        const oPos = [];
+                        for(let k=0; k<100; k++) { const a=(k/100)*Math.PI*2; oPos.push(Math.cos(a)*p.r, 0, Math.sin(a)*p.r); }
+                        const oGeo = new THREE.BufferGeometry(); oGeo.setAttribute('position', new THREE.Float32BufferAttribute(oPos,3));
+                        universeGroup.add(new THREE.Points(oGeo, new THREE.PointsMaterial({color:0x333333, size:0.5})));
+                        universeGroup.add(grp); this.orbiters.push(grp); totalCount+=1600;
+                    });
+                }
+
+                else if (type === 2) { // 地月系
+                    const earth = this.createBall(35000, 18, 0x0044ff, 2);
+                    const cols = earth.geometry.attributes.customColor.array;
+                    for(let i=0; i<cols.length; i+=3) {
+                        if(Math.random()>0.7) { cols[i]=0; cols[i+1]=1; cols[i+2]=0.5; }
+                        if(Math.random()>0.85) { cols[i]=1; cols[i+1]=1; cols[i+2]=1; }
+                    }
+                    earth.geometry.attributes.customColor.needsUpdate = true;
+                    universeGroup.add(earth);
+                    
+                    const mg = new THREE.Group(); mg.userData = { speed: 0.005 };
+                    const moon = this.createBall(5000, 5, 0xaaaaaa, 0.5); moon.position.set(50, 0, 0); mg.add(moon);
+                    universeGroup.add(mg); this.orbiters.push(mg);
+
+                    for(let k=0; k<8; k++) {
+                        const shipGroup = new THREE.Group();
+                        shipGroup.userData = { speed: 0.01 + Math.random()*0.02, axis: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize() };
+                        const ship = this.createBall(50, 0.5, 0x00ffff, 0);
+                        const orbitR = 25 + Math.random()*10;
+                        ship.position.set(orbitR, 0, 0);
+                        const trail = this.createBall(20, 0.2, 0xffffff, 1.0);
+                        trail.position.set(orbitR - 1, 0, 0);
+                        shipGroup.add(ship); shipGroup.add(trail);
+                        shipGroup.rotation.x = Math.random() * Math.PI; shipGroup.rotation.z = Math.random() * Math.PI;
+                        universeGroup.add(shipGroup); this.orbiters.push(shipGroup);
+                    }
+
+                    totalCount=41000;
+                }
+
+                else if (type === 3) { // 黑洞
+                    addParticles(80000, (i) => {
+                        const r = Math.random() * 50 + 10;
+                        let x,y,z, c;
+                        const angle = Math.random() * Math.PI * 2 * 15;
+                        x = Math.cos(angle) * r;
+                        z = Math.sin(angle) * r;
+                        y = (Math.random()-0.5) * (150/r);
+                        
+                        const ratio = (r-10)/50;
+                        if(ratio < 0.15) c = new THREE.Color(0xffffff);
+                        else if(ratio < 0.5) c = new THREE.Color(0xffaa00);
+                        else c = new THREE.Color(0xff3300).lerp(new THREE.Color(0x330000), (ratio-0.5)*2);
+                        
+                        if(Math.random() < 0.2) {
+                            const rHalo = 12 + Math.random() * 60;
+                            const theta = Math.random()*Math.PI*2;
+                            const phi = Math.acos(Math.random()*2-1);
+                            x = rHalo*Math.sin(phi)*Math.cos(theta); y = rHalo*Math.sin(phi)*Math.sin(theta); z = rHalo*Math.cos(phi);
+                            c = new THREE.Color(0x331100);
+                        }
+                        return {x,y,z, c, s: Math.random()*1.8+0.5};
+                    });
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                    geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                    geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                    universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                else if (type === 4) { // 星云
+                    addParticles(70000, (i) => {
+                        const pillar = i % 3;
+                        const h = Math.random() * 80 - 40; 
+                        const w = (Math.sin(h*0.05 + pillar) + 1.2) * 6; 
+                        const spread = (Math.random()-0.5) * w;
+                        let x = spread + (pillar-1)*25;
+                        let y = h;
+                        let z = (Math.random()-0.5) * w;
+                        x += Math.sin(y*0.08)*8; z += Math.cos(y*0.08)*5;
+
+                        let c, s;
+                        if(pillar==0) c = new THREE.Color(0x440055).lerp(new THREE.Color(0xffaa00), Math.random()*0.2);
+                        else if(pillar==1) c = new THREE.Color(0x003344).lerp(new THREE.Color(0x00ffff), Math.random()*0.3);
+                        else c = new THREE.Color(0x220000).lerp(new THREE.Color(0xff5555), Math.random()*0.3);
+
+                        if(Math.random() < 0.05) { c = new THREE.Color(0xffffff); s = Math.random() * 3 + 1; } 
+                        else { s = Math.random() * 2 + 0.5; }
+                        return {x,y,z, c, s};
+                    });
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+                    geo.setAttribute('customColor', new THREE.Float32BufferAttribute(col,3));
+                    geo.setAttribute('size', new THREE.Float32BufferAttribute(sz,1));
+                    universeGroup.add(new THREE.Points(geo, sharedMaterial));
+                }
+
+                document.getElementById('disp-count').innerText = totalCount.toLocaleString();
+            },
+
+            animate: function() {
+                this.orbiters.forEach(obj => {
+                    if (obj.userData.axis) obj.rotateOnAxis(obj.userData.axis, obj.userData.speed);
+                    else obj.rotation.y += obj.userData.speed;
+                });
+            }
+        };
+
+        Universe.switch(0); 
+
+        // ================= 4. 动画循环 =================
         let cRotX=0, cRotY=0, cZoom=1;
         let lastTime = 0;
         let frameCount = 0;
@@ -358,20 +705,23 @@
                 lastTime = time;
             }
 
+            Universe.animate();
+
             if(State.hasHand) {
+                // 手势控制
                 State.tRotX = State.hRotX; State.tRotY = State.hRotY; State.tZoom = State.hZoom;
                 State.mRotX = State.hRotX; State.mRotY = State.hRotY; State.mZoom = State.hZoom;
-                points.rotation.y += 0.0002;
+                universeGroup.rotation.y += 0.0002;
             } else {
                 State.tRotX = State.mRotX; State.tRotY = State.mRotY; State.tZoom = State.mZoom;
-                points.rotation.y += 0.0006;
+                universeGroup.rotation.y += 0.0006;
             }
 
-            cRotX += (State.tRotX - cRotX) * 0.08;
-            cRotY += (State.tRotY - cRotY) * 0.08;
-            cZoom += (State.tZoom - cZoom) * 0.08;
+            cRotX += (State.tRotX - cRotX) * 0.04;
+            cRotY += (State.tRotY - cRotY) * 0.04;
+            cZoom += (State.tZoom - cZoom) * 0.02; 
 
-            const r = 45 * cZoom;
+            const r = 65 * cZoom;
             camera.position.x = r * Math.sin(cRotY) * Math.cos(cRotX);
             camera.position.y = r * Math.sin(cRotX);
             camera.position.z = r * Math.cos(cRotY) * Math.cos(cRotX);
@@ -381,17 +731,15 @@
         }
         animate(0);
 
-        // ================= 3. AI 网络 (Safari 修复版) =================
+        // ================= 5. AI 网络 =================
         const Network = {
             sources: [
-                { name: '阿里云 CDN', url: 'https://registry.npmmirror.com/@mediapipe/hands/0.4.1646424915/files/' },
-                { name: '镜像官方源', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
+                { name: 'UNPKG (GLOBAL)', url: 'https://unpkg.com/@mediapipe/hands/' },
+                { name: 'JSDELIVR', url: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' }
             ],
 
             async init() {
                 const elNet = document.getElementById('disp-net');
-                const elPing = document.getElementById('disp-ping');
-
                 let bestSrc = this.sources[0];
                 let minPing = 9999;
                 
@@ -404,8 +752,8 @@
                     } catch(e) {}
                 }
 
-                elNet.innerText = bestSrc.name;
-                elPing.innerText = minPing < 9999 ? minPing + " ms" : "超时";
+                if (minPing === 9999) bestSrc = this.sources[0];
+                if(elNet) elNet.innerText = bestSrc.name;
 
                 try {
                     const hands = new Hands({locateFile: f => bestSrc.url + f});
@@ -416,16 +764,14 @@
                     hands.onResults(this.onRes);
 
                     const vid = document.getElementById('input_video');
-                    // ★★★ Safari 核心修复：移除 width/height 强制约束 ★★★
                     const cam = new Camera(vid, {
                         onFrame: async () => await hands.send({image: vid}),
-                        // width: 320,  <-- 已删除，防止 iOS 报错
-                        // height: 240, <-- 已删除，防止 iOS 报错
                         facingMode: 'user'
                     });
                     await cam.start();
                 } catch(e) {
-                    elNet.innerText = "加载失败: " + e.name;
+                    if(elNet) elNet.innerText = "加载失败";
+                    UI.logErr(e.message);
                 }
             },
 
@@ -433,9 +779,22 @@
                 const elSrc = document.getElementById('disp-source');
                 const elVal = document.getElementById('disp-val');
                 
+                // ★★★ Debug 画线逻辑 ★★★
+                if(Config.debugMode) {
+                    const canvas = document.getElementById('debug-canvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    if(res.multiHandLandmarks) {
+                        for (const landmarks of res.multiHandLandmarks) {
+                            drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffaa', lineWidth: 2});
+                            drawLandmarks(ctx, landmarks, {color: '#ff0055', lineWidth: 1});
+                        }
+                    }
+                }
+
                 if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                     State.hasHand = true;
-                    elSrc.innerText = "AI 手势识别"; // 英文显示
+                    elSrc.innerText = "AI 手势接管"; 
                     elSrc.className = "value accent";
 
                     const lm = res.multiHandLandmarks[0];
@@ -446,12 +805,14 @@
                     const d = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y);
                     elVal.innerText = d.toFixed(2); 
 
-                    if(d < 0.2) State.hZoom = 0.4;
-                    else if(d > 0.35) State.hZoom = 1.8;
-                    else State.hZoom = 1.0;
+                    // ★★★ V24 核心逻辑：无限微距 + 灵敏度 ★★★
+                    let target = d * Config.sensitivity; 
+                    target = Math.max(0.01, Math.min(6.0, target));
+                    State.hZoom = target;
+                    
                 } else {
                     State.hasHand = false;
-                    elSrc.innerText = "TOUCH / MOUSE";
+                    elSrc.innerText = "触控 / 鼠标"; 
                     elSrc.className = "value inactive";
                 }
             }
